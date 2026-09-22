@@ -349,46 +349,66 @@ function getDuplicatePlainMappings() {
 // ---------------------------------------------------------------------------
 
 /**
- * Set mapping from Encrypted Alphabet table or Ciphertext workspace.
- * Sets the plain letter for this cipherChar without erasing other cipher letters mapped to plainChar.
+ * Add mapping from Plain Alphabet table.
+ * Preserves all existing mappings without removing any letters from original places.
  */
-function setEncryptedMapping(cipherChar, plainChar) {
-  const c = cipherChar.toUpperCase();
-  const p = plainChar ? plainChar.toUpperCase() : null;
-
-  pushHistory();
-  // Filter out any existing mapping where cipher is c
-  state.appliedMappings = state.appliedMappings.filter(m => m.cipher !== c);
-  if (p) {
-    state.appliedMappings.unshift({ cipher: c, plain: p });
-  }
-  syncCipherToPlain();
-  renderAll();
-}
-
-/**
- * Set mapping from Plain Alphabet table.
- * Sets the cipher letter for this plainChar without erasing other plain letters mapped to cipherChar.
- */
-function setPlainMapping(plainChar, cipherChar) {
+function addPlainMapping(plainChar, cipherChar) {
   const p = plainChar.toUpperCase();
-  const c = cipherChar ? cipherChar.toUpperCase() : null;
+  const c = cipherChar.toUpperCase();
+
+  if (state.appliedMappings.some(m => m.cipher === c && m.plain === p)) return;
 
   pushHistory();
-  // Filter out any existing mapping where plain is p
-  state.appliedMappings = state.appliedMappings.filter(m => m.plain !== p);
-  if (c) {
-    state.appliedMappings.unshift({ cipher: c, plain: p });
-  }
+  state.appliedMappings.unshift({ cipher: c, plain: p });
   syncCipherToPlain();
   renderAll();
 }
 
 /**
- * Backward-compatible setMapping (routes to setEncryptedMapping)
+ * Add mapping from Encrypted Alphabet table or Ciphertext workspace.
+ * Preserves all existing mappings without removing any letters from original places.
+ */
+function addEncryptedMapping(cipherChar, plainChar) {
+  const c = cipherChar.toUpperCase();
+  const p = plainChar.toUpperCase();
+
+  if (state.appliedMappings.some(m => m.cipher === c && m.plain === p)) return;
+
+  pushHistory();
+  state.appliedMappings.unshift({ cipher: c, plain: p });
+  syncCipherToPlain();
+  renderAll();
+}
+
+function setPlainMapping(plainChar, cipherChar) {
+  if (!cipherChar) {
+    removePlainMapping(plainChar);
+    return;
+  }
+  for (const ch of cipherChar.toUpperCase().replace(/[^A-Z]/g, "")) {
+    addPlainMapping(plainChar, ch);
+  }
+}
+
+function setEncryptedMapping(cipherChar, plainChar) {
+  if (!plainChar) {
+    removeCipherMapping(cipherChar);
+    return;
+  }
+  for (const ch of plainChar.toUpperCase().replace(/[^A-Z]/g, "")) {
+    addEncryptedMapping(cipherChar, ch);
+  }
+}
+
+function addMapping(cipherChar, plainChar) {
+  addEncryptedMapping(cipherChar, plainChar);
+}
+
+/**
+ * Backward-compatible setMapping (routes to addEncryptedMapping)
  */
 function setMapping(cipherChar, plainChar) {
-  setEncryptedMapping(cipherChar, plainChar);
+  addEncryptedMapping(cipherChar, plainChar);
 }
 
 /**
@@ -567,21 +587,18 @@ function renderAlphabetTables() {
         const val = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
         if (val) {
           const char = val.slice(-1);
-          e.target.value = char;
-          setPlainMapping(letter, char);
+          addPlainMapping(letter, char);
           if (idx < 25) {
             plainInputsEl.children[idx + 1].focus();
           }
         } else {
-          setPlainMapping(letter, null);
+          removePlainMapping(letter);
         }
       });
 
       plainInput.addEventListener("keydown", (e) => {
         if (e.key === "Backspace" || e.key === "Delete") {
-          if (!plainInput.value || (plainInput.selectionStart === 0 && plainInput.selectionEnd === plainInput.value.length)) {
-            setPlainMapping(letter, null);
-          }
+          removePlainMapping(letter);
         } else if (e.key === "ArrowRight" && idx < 25) {
           plainInputsEl.children[idx + 1].focus();
         } else if (e.key === "ArrowLeft" && idx > 0) {
@@ -627,21 +644,18 @@ function renderAlphabetTables() {
         const val = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
         if (val) {
           const char = val.slice(-1);
-          e.target.value = char;
-          setEncryptedMapping(letter, char);
+          addEncryptedMapping(letter, char);
           if (idx < 25) {
             encryptedInputsEl.children[idx + 1].focus();
           }
         } else {
-          setEncryptedMapping(letter, null);
+          removeCipherMapping(letter);
         }
       });
 
       encInput.addEventListener("keydown", (e) => {
         if (e.key === "Backspace" || e.key === "Delete") {
-          if (!encInput.value || (encInput.selectionStart === 0 && encInput.selectionEnd === encInput.value.length)) {
-            setEncryptedMapping(letter, null);
-          }
+          removeCipherMapping(letter);
         } else if (e.key === "ArrowRight" && idx < 25) {
           encryptedInputsEl.children[idx + 1].focus();
         } else if (e.key === "ArrowLeft" && idx > 0) {
