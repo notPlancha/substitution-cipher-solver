@@ -9,10 +9,8 @@ A responsive, interactive WebUI tool for cryptanalyzing and solving monoalphabet
 
 ## 🚀 Live Demo on GitHub Pages
 
-Once published to your repository, your site will be live at:
-```
-https://<your-username>.github.io/<your-repo-name>/
-```
+The application is deployed and live at:
+**[https://notplancha.github.io/substitution-cipher-solver/](https://notplancha.github.io/substitution-cipher-solver/)**
 
 ---
 
