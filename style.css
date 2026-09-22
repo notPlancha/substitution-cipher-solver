@@ -1,0 +1,881 @@
+/* ==========================================================================
+   Substitution Cipher Solver - Stylesheet
+   Designed to match the clean aesthetic in the reference screenshots.
+   ========================================================================== */
+
+:root {
+  --bg-app: #cfd8e3;
+  --bg-card: #e4eaf1;
+  --bg-card-contrast: #ffffff;
+  --border-color: #9ba8b8;
+  --border-dark: #64748b;
+  
+  /* Palette from reference images */
+  --blue-primary: #2872a1;       /* Active alphabet cell header */
+  --blue-text: #1b6294;          /* Decrypted plaintext letter color */
+  --blue-hover: #1e5a80;
+  --cell-used-bg: #cbd5e1;       /* Grayed out alphabet cell */
+  --cell-used-text: #6e8296;     /* Muted text for used cell */
+  
+  --cipher-text: #0f172a;        /* Bold dark monospaced ciphertext */
+  --plain-text: #1d72b8;         /* Decrypted letter */
+  --blank-underscore: #1d72b8;   /* Underscore for unsolved letters */
+  
+  --highlight-bg: #fef08a;       /* Focused character matching highlight */
+  --highlight-border: #eab308;
+  --highlight-ngram: #fed7aa;      /* Selected n-gram highlight */
+  
+  --conflict-bg: #fee2e2;        /* Duplicate mapping warning */
+  --conflict-border: #ef4444;
+  --conflict-text: #b91c1c;
+  
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", "Roboto Mono", "Courier New", monospace;
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  
+  --cell-size: 32px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-app);
+  color: #1e293b;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+.app-container {
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* --------------------------------------------------------------------------
+   Top Header
+   -------------------------------------------------------------------------- */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 14px 20px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-icon {
+  font-size: 28px;
+}
+
+.app-header h1 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: #475569;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn-icon {
+  font-size: 14px;
+}
+
+.btn-secondary {
+  background: #ffffff;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
+.btn-secondary:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.btn-primary {
+  background: var(--blue-primary);
+  color: #ffffff;
+}
+
+.btn-primary:hover {
+  background: var(--blue-hover);
+}
+
+/* --------------------------------------------------------------------------
+   Conflict Alert Banner
+   -------------------------------------------------------------------------- */
+.conflict-banner {
+  background: var(--conflict-bg);
+  border: 1px solid var(--conflict-border);
+  color: var(--conflict-text);
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  animation: pulse 1.5s infinite alternate;
+}
+
+.conflict-banner.hidden {
+  display: none !important;
+}
+
+.conflict-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@keyframes pulse {
+  from { opacity: 0.9; }
+  to { opacity: 1; }
+}
+
+/* --------------------------------------------------------------------------
+   Main 2-Column Layout
+   -------------------------------------------------------------------------- */
+.main-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1180px) {
+  .main-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Left Workspace
+   -------------------------------------------------------------------------- */
+.left-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* --------------------------------------------------------------------------
+   Alphabet Mapping Tables (Image 1)
+   -------------------------------------------------------------------------- */
+.alphabet-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.alphabet-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.alphabet-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0c1c2e;
+}
+
+.alphabet-grid-wrapper {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.alphabet-row {
+  display: grid;
+  grid-template-columns: repeat(26, var(--cell-size));
+  width: max-content;
+}
+
+/* Labeled letters row (Plain or Encrypted A-Z) */
+.alphabet-labels .cell-label {
+  width: var(--cell-size);
+  height: var(--cell-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 700;
+  border: 1px solid #475569;
+  border-right: none;
+  background-color: var(--blue-primary);
+  color: #ffffff;
+  user-select: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.alphabet-labels .cell-label:last-child {
+  border-right: 1px solid #475569;
+}
+
+/* Used / Disabled cell in alphabet row */
+.alphabet-labels .cell-label.used {
+  background-color: var(--cell-used-bg);
+  color: var(--cell-used-text);
+  border-color: #94a3b8;
+}
+
+/* Input boxes row in alphabet tables */
+.alphabet-inputs .cell-input {
+  width: var(--cell-size);
+  height: var(--cell-size);
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--blue-text);
+  background-color: #ffffff;
+  border: 1px solid #64748b;
+  border-right: none;
+  outline: none;
+  text-transform: uppercase;
+  caret-color: var(--blue-text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.alphabet-inputs .cell-input:last-child {
+  border-right: 1px solid #64748b;
+}
+
+.alphabet-inputs .cell-input:focus {
+  border-color: #2563eb;
+  box-shadow: inset 0 0 0 1px #2563eb;
+  z-index: 2;
+}
+
+.alphabet-inputs .cell-input.conflict {
+  background-color: var(--conflict-bg) !important;
+  color: var(--conflict-text) !important;
+  border-color: var(--conflict-border) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Ciphertext & Typable Blanks (Image 2)
+   -------------------------------------------------------------------------- */
+.cipher-text-card {
+  background: var(--bg-card);
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.cipher-text-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.4);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.card-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.badge-hint {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1e40af;
+}
+
+kbd {
+  display: inline-block;
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: #e2e8f0;
+  border: 1px solid #94a3b8;
+  border-radius: 3px;
+  margin: 0 2px;
+}
+
+.cipher-text-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.select-sm {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+}
+
+/* Container for all cipher lines */
+.cipher-interactive-container {
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  overflow-x: auto;
+  user-select: text;
+}
+
+/* A single line block containing ciphertext row and decrypted typable row */
+.cipher-line-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.line-letters-row {
+  display: flex;
+  flex-wrap: nowrap;
+  font-family: var(--font-mono);
+  font-size: 17px;
+  letter-spacing: 0.12em;
+}
+
+/* Cipher characters row */
+.line-cipher-row {
+  font-weight: 700;
+  color: var(--cipher-text);
+}
+
+/* Decrypted plaintext row */
+.line-plain-row {
+  font-weight: 600;
+  color: var(--plain-text);
+}
+
+/* Individual character slot in the column */
+.char-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 24px;
+  text-align: center;
+  position: relative;
+  transition: background-color 0.1s ease;
+}
+
+/* Typable input blank in the plain row */
+.char-slot-blank {
+  cursor: text;
+  border-radius: 2px;
+}
+
+.char-slot-blank:hover {
+  background-color: rgba(37, 99, 235, 0.12);
+}
+
+.char-slot-blank.focused {
+  background-color: rgba(37, 99, 235, 0.25);
+  box-shadow: 0 0 0 2px #2563eb;
+  z-index: 5;
+}
+
+/* Highlight for all instances of the active/selected letter */
+.char-slot.highlight-match {
+  background-color: var(--highlight-bg);
+  border-radius: 2px;
+}
+
+/* Highlight for selected n-grams (bigrams/trigrams) */
+.char-slot.highlight-ngram {
+  background-color: var(--highlight-ngram);
+  border-radius: 2px;
+}
+
+/* Space token between words */
+.char-slot.space-slot {
+  width: 14px;
+  background: transparent;
+  cursor: default;
+}
+
+/* Manual space indicator */
+.space-gap-marker {
+  display: inline-block;
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.space-gap-marker::after {
+  content: "";
+  display: block;
+  width: 2px;
+  height: 12px;
+  background: #94a3b8;
+  margin: 6px auto;
+  opacity: 0.4;
+  border-radius: 1px;
+}
+
+.char-slot-blank.space-slot:hover .space-gap-marker::after {
+  background: #ef4444;
+  opacity: 1;
+}
+
+/* Underscore slot styling */
+.blank-char {
+  display: inline-block;
+  font-family: var(--font-mono);
+  color: var(--blank-underscore);
+  font-weight: 700;
+}
+
+.blank-char.empty {
+  color: #1d72b8;
+  opacity: 0.9;
+}
+
+.blank-char.conflict {
+  color: var(--conflict-text);
+  text-decoration: underline wavy var(--conflict-border);
+}
+
+/* --------------------------------------------------------------------------
+   Right Sidebar (Cryptanalysis)
+   -------------------------------------------------------------------------- */
+.right-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sidebar-card {
+  background: var(--bg-card-contrast);
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sidebar-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sidebar-card-header h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.sidebar-hint {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.sort-toggle {
+  display: flex;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.btn-toggle {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #ffffff;
+  color: #475569;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-toggle.active {
+  background: var(--blue-primary);
+  color: #ffffff;
+}
+
+.chart-legend {
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+  color: #475569;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend-box {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.legend-cipher {
+  background-color: #2563eb;
+}
+
+.legend-english {
+  background-color: #f59e0b;
+}
+
+/* --------------------------------------------------------------------------
+   SVG Frequency Bar Chart
+   -------------------------------------------------------------------------- */
+.letter-chart-container {
+  width: 100%;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.freq-chart-svg {
+  width: 100%;
+  display: block;
+}
+
+.chart-bar-group {
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.chart-bar-group:hover {
+  opacity: 0.85;
+}
+
+.chart-bar-group.active rect.bar-cipher {
+  fill: #1d4ed8;
+  filter: drop-shadow(0 0 3px rgba(37, 99, 235, 0.6));
+}
+
+/* --------------------------------------------------------------------------
+   N-grams (Bigrams & Trigrams) Dual Lists
+   -------------------------------------------------------------------------- */
+.ngrams-dual-table {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 10px;
+}
+
+.ngram-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ngram-col-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.05em;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.ngram-list {
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ngram-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.ngram-row:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.ngram-row.active {
+  background: #fed7aa;
+  border-color: #f97316;
+  font-weight: 700;
+}
+
+.ngram-label {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ngram-decrypted {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--blue-text);
+  font-size: 11px;
+}
+
+.ngram-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.reference-list .ngram-row {
+  cursor: default;
+  background: #ffffff;
+}
+
+.reference-list .ngram-row:hover {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
+/* Double letters chips */
+.doubles-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.double-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.double-chip:hover {
+  background: #e2e8f0;
+}
+
+.double-chip.active {
+  background: #fed7aa;
+  border-color: #f97316;
+}
+
+.double-label {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.double-decrypted {
+  font-family: var(--font-mono);
+  color: var(--blue-text);
+  font-size: 11px;
+}
+
+.double-count {
+  font-size: 10px;
+  color: #64748b;
+}
+
+/* --------------------------------------------------------------------------
+   Modal for Custom Ciphertext
+   -------------------------------------------------------------------------- */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.modal-backdrop.hidden {
+  display: none !important;
+}
+
+.modal-dialog {
+  background: #ffffff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 580px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-header h3 {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal-body label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.modal-body textarea {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  outline: none;
+  resize: vertical;
+}
+
+.modal-body textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.modal-options {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #475569;
+  cursor: pointer;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* --------------------------------------------------------------------------
+   Toast Notification
+   -------------------------------------------------------------------------- */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: #0f172a;
+  color: #ffffff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 200;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  transform: translateY(0);
+}
+
+.toast.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(10px);
+}

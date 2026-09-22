@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Substitution Cipher Solver</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔤</text></svg>" />
+  <meta name="description" content="Interactive Monoalphabetic Substitution Cipher Solver with frequency statistics and n-gram analysis" />
+  <meta name="theme-color" content="#2872a1" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Header & Actions -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="logo-icon">🔤</div>
+        <div>
+          <h1>Substitution Cipher Solver</h1>
+          <p class="subtitle">Interactive cryptanalysis tool with bidirectional autofill</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btn-undo" class="btn btn-secondary" title="Go Back / Undo (Ctrl+Z)" disabled>
+          <span class="btn-icon">↩️</span> Undo
+        </button>
+        <button id="btn-redo" class="btn btn-secondary" title="Go Forward / Redo (Ctrl+Y)" disabled>
+          <span class="btn-icon">↪️</span> Redo
+        </button>
+        <button id="btn-load-sample" class="btn btn-secondary" title="Load sample cipher from screenshot">
+          <span class="btn-icon">📋</span> Load Screenshot Sample
+        </button>
+        <button id="btn-open-paste-modal" class="btn btn-secondary" title="Paste your own ciphertext">
+          <span class="btn-icon">✏️</span> Input Ciphertext
+        </button>
+        <button id="btn-clear-spaces" class="btn btn-secondary" title="Remove all manually inserted spaces">
+          <span class="btn-icon">␣</span> Reset Spaces
+        </button>
+        <button id="btn-clear-mappings" class="btn btn-secondary" title="Clear all letter substitutions">
+          <span class="btn-icon">↺</span> Clear Key
+        </button>
+        <button id="btn-copy-solution" class="btn btn-primary" title="Copy decrypted plaintext">
+          <span class="btn-icon">📄</span> Copy Plaintext
+        </button>
+      </div>
+    </header>
+
+    <!-- Conflict / Duplicate Mapping Alert Banner -->
+    <div id="conflict-banner" class="conflict-banner hidden" role="alert">
+      <div class="conflict-content">
+        <span class="conflict-icon">⚠️</span>
+        <span id="conflict-message">Duplicate mapping detected!</span>
+      </div>
+    </div>
+
+    <!-- Main 2-Column Layout -->
+    <main class="main-layout">
+      <!-- Left Column: Cipher Workspace -->
+      <section class="left-workspace">
+        
+        <!-- Alphabet Tables (Image 1 Style) -->
+        <div class="alphabet-section">
+          <!-- Plain Alphabet Table -->
+          <div class="alphabet-card">
+            <h2 class="alphabet-title">Plain alphabet</h2>
+            <div class="alphabet-grid-wrapper">
+              <div id="plain-alphabet-labels" class="alphabet-row alphabet-labels">
+                <!-- 26 Plain letter cells A-Z (Blue or grayed out) -->
+              </div>
+              <div id="plain-alphabet-inputs" class="alphabet-row alphabet-inputs">
+                <!-- 26 Typable cipher inputs -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Encrypted Alphabet Table -->
+          <div class="alphabet-card">
+            <h2 class="alphabet-title">Encrypted alphabet</h2>
+            <div class="alphabet-grid-wrapper">
+              <div id="encrypted-alphabet-inputs" class="alphabet-row alphabet-inputs">
+                <!-- 26 Typable plain inputs -->
+              </div>
+              <div id="encrypted-alphabet-labels" class="alphabet-row alphabet-labels">
+                <!-- 26 Encrypted letter cells A-Z (Blue or grayed out) -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ciphertext and Typable Blanks (Image 2 Style) -->
+        <div class="cipher-text-card">
+          <div class="cipher-text-header">
+            <div class="card-info">
+              <span class="badge" id="stats-total-chars">295 letters</span>
+              <span class="badge" id="stats-solved-chars">3/26 mapped</span>
+              <span class="badge badge-hint">Tip: Press <kbd>Space</kbd> to insert space, <kbd>Backspace</kbd> to delete space/letter</span>
+            </div>
+            <div class="cipher-text-controls">
+              <label for="line-width-select">Wrap length:</label>
+              <select id="line-width-select" class="select-sm">
+                <option value="60" selected>60 characters (Screenshot)</option>
+                <option value="50">50 characters</option>
+                <option value="40">40 characters</option>
+                <option value="auto">Fluid (Window width)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Interactive Text Grid -->
+          <div id="cipher-interactive-container" class="cipher-interactive-container" tabindex="0">
+            <!-- Rendered by app.js: paired ciphertext row and typable blank row -->
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Right Column: Cryptanalysis Sidebar -->
+      <aside class="right-sidebar">
+        <!-- Letter Frequency Analysis -->
+        <div class="sidebar-card">
+          <div class="sidebar-card-header">
+            <h3>Letter Statistics</h3>
+            <div class="sort-toggle">
+              <button id="btn-sort-freq" class="btn-toggle active" title="Sort by text frequency">Freq</button>
+              <button id="btn-sort-az" class="btn-toggle" title="Sort alphabetically">A-Z</button>
+            </div>
+          </div>
+
+          <div class="chart-legend">
+            <div class="legend-item"><span class="legend-box legend-cipher"></span> Ciphertext %</div>
+            <div class="legend-item"><span class="legend-box legend-english"></span> English Standard %</div>
+          </div>
+
+          <!-- Frequency Comparison Chart (SVG) -->
+          <div id="letter-chart-container" class="letter-chart-container">
+            <!-- SVG chart inserted here -->
+          </div>
+        </div>
+
+        <!-- Bigrams Analysis -->
+        <div class="sidebar-card">
+          <div class="sidebar-card-header">
+            <h3>Top Bigrams</h3>
+            <span class="sidebar-hint">Click to highlight</span>
+          </div>
+          <div class="ngrams-dual-table">
+            <div class="ngram-col">
+              <div class="ngram-col-title">Ciphertext</div>
+              <div id="cipher-bigrams-list" class="ngram-list">
+                <!-- Filled by JS -->
+              </div>
+            </div>
+            <div class="ngram-col">
+              <div class="ngram-col-title">English Ref</div>
+              <div id="english-bigrams-list" class="ngram-list reference-list">
+                <!-- Filled by JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Trigrams Analysis -->
+        <div class="sidebar-card">
+          <div class="sidebar-card-header">
+            <h3>Top Trigrams</h3>
+            <span class="sidebar-hint">Click to highlight</span>
+          </div>
+          <div class="ngrams-dual-table">
+            <div class="ngram-col">
+              <div class="ngram-col-title">Ciphertext</div>
+              <div id="cipher-trigrams-list" class="ngram-list">
+                <!-- Filled by JS -->
+              </div>
+            </div>
+            <div class="ngram-col">
+              <div class="ngram-col-title">English Ref</div>
+              <div id="english-trigrams-list" class="ngram-list reference-list">
+                <!-- Filled by JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Double Letters (Repeats) -->
+        <div class="sidebar-card">
+          <div class="sidebar-card-header">
+            <h3>Double Letters (Repeats)</h3>
+          </div>
+          <div id="cipher-doubles-list" class="doubles-chips">
+            <!-- Filled by JS -->
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <!-- Modal for Pasting Custom Ciphertext -->
+  <div id="paste-modal" class="modal-backdrop hidden">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Input Ciphertext</h3>
+        <button id="btn-close-modal" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label for="custom-ciphertext-input">Paste or type your ciphertext below:</label>
+        <textarea id="custom-ciphertext-input" rows="8" placeholder="Enter encrypted text here..."></textarea>
+        <div class="modal-options">
+          <label class="checkbox-label">
+            <input type="checkbox" id="opt-uppercase" checked /> Auto-uppercase letters
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="opt-strip-punct" /> Strip punctuation & numbers
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-modal-cancel" class="btn btn-secondary">Cancel</button>
+        <button id="btn-modal-apply" class="btn btn-primary">Load Ciphertext</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast hidden">Copied to clipboard!</div>
+
+  <script src="app.js" type="module"></script>
+</body>
+</html>
