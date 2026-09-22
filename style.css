@@ -264,6 +264,15 @@ body {
   border-color: #94a3b8;
 }
 
+/* Duplicate conflict highlight on alphabet label cell */
+.alphabet-labels .cell-label.conflict-label {
+  background-color: #ef4444 !important;
+  color: #ffffff !important;
+  border-color: #b91c1c !important;
+  box-shadow: inset 0 0 0 1px #b91c1c;
+  font-weight: 800;
+}
+
 /* Input boxes row in alphabet tables */
 .alphabet-inputs .cell-input {
   width: var(--cell-size);
@@ -293,9 +302,13 @@ body {
 }
 
 .alphabet-inputs .cell-input.conflict {
-  background-color: var(--conflict-bg) !important;
-  color: var(--conflict-text) !important;
-  border-color: var(--conflict-border) !important;
+  background-color: #fee2e2 !important;
+  color: #b91c1c !important;
+  border-color: #ef4444 !important;
+  box-shadow: inset 0 0 0 1.5px #ef4444 !important;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  font-size: 13px;
 }
 
 /* --------------------------------------------------------------------------

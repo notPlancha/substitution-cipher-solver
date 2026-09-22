@@ -77,7 +77,6 @@ const history = {
 function pushHistory() {
   history.past.push({
     tokens: [...state.tokens],
-    cipherToPlain: { ...state.cipherToPlain },
     appliedMappings: state.appliedMappings.map(m => ({ ...m })),
     focusedIndex: state.focusedIndex
   });
@@ -92,14 +91,13 @@ function undo() {
   if (history.past.length === 0) return;
   history.future.push({
     tokens: [...state.tokens],
-    cipherToPlain: { ...state.cipherToPlain },
     appliedMappings: state.appliedMappings.map(m => ({ ...m })),
     focusedIndex: state.focusedIndex
   });
   const prev = history.past.pop();
   state.tokens = [...prev.tokens];
-  state.cipherToPlain = { ...prev.cipherToPlain };
   state.appliedMappings = prev.appliedMappings ? prev.appliedMappings.map(m => ({ ...m })) : [];
+  syncCipherToPlain();
   state.focusedIndex = prev.focusedIndex;
   updateHistoryButtons();
   renderAll();
@@ -110,14 +108,13 @@ function redo() {
   if (history.future.length === 0) return;
   history.past.push({
     tokens: [...state.tokens],
-    cipherToPlain: { ...state.cipherToPlain },
     appliedMappings: state.appliedMappings.map(m => ({ ...m })),
     focusedIndex: state.focusedIndex
   });
   const next = history.future.pop();
   state.tokens = [...next.tokens];
-  state.cipherToPlain = { ...next.cipherToPlain };
   state.appliedMappings = next.appliedMappings ? next.appliedMappings.map(m => ({ ...m })) : [];
+  syncCipherToPlain();
   state.focusedIndex = next.focusedIndex;
   updateHistoryButtons();
   renderAll();
@@ -143,8 +140,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function loadSample() {
   state.tokens = SAMPLE_CIPHERTEXT.split("");
-  state.cipherToPlain = { ...SAMPLE_INITIAL_MAPPINGS };
   state.appliedMappings = SAMPLE_INITIAL_APPLIED.map(m => ({ ...m }));
+  syncCipherToPlain();
   state.focusedIndex = null;
   state.highlightedChar = null;
   state.highlightedNgram = null;
@@ -246,79 +243,197 @@ function computeDoubleLetters() {
 }
 
 /**
- * Inverted mapping: Plain -> Cipher
+ * Synchronize state.cipherToPlain from state.appliedMappings
+ * appliedMappings is ordered with most recent first, so reverse iteration
+ * allows newer mappings to be the primary mapping in state.cipherToPlain.
+ */
+function syncCipherToPlain() {
+  state.cipherToPlain = {};
+  for (let i = state.appliedMappings.length - 1; i >= 0; i--) {
+    const m = state.appliedMappings[i];
+    if (m && m.cipher && m.plain) {
+      state.cipherToPlain[m.cipher] = m.plain;
+    }
+  }
+}
+
+/**
+ * Get all plain letters mapped to a given cipher letter
+ */
+function getPlainsForCipher(cipher) {
+  if (!cipher) return [];
+  const c = cipher.toUpperCase();
+  const plains = [];
+  for (const m of state.appliedMappings) {
+    if (m.cipher === c && m.plain && !plains.includes(m.plain)) {
+      plains.push(m.plain);
+    }
+  }
+  return plains;
+}
+
+/**
+ * Get all cipher letters mapped to a given plain letter
+ */
+function getCiphersForPlain(plain) {
+  if (!plain) return [];
+  const p = plain.toUpperCase();
+  const ciphers = [];
+  for (const m of state.appliedMappings) {
+    if (m.plain === p && m.cipher && !ciphers.includes(m.cipher)) {
+      ciphers.push(m.cipher);
+    }
+  }
+  return ciphers;
+}
+
+/**
+ * Inverted mapping: Plain -> Cipher (first mapped cipher for backward-compatibility)
  */
 function getPlainToCipher() {
   const inverted = {};
-  for (const [c, p] of Object.entries(state.cipherToPlain)) {
-    if (p) {
-      const pUpper = p.toUpperCase();
-      if (!inverted[pUpper]) {
-        inverted[pUpper] = c.toUpperCase();
-      }
+  for (const m of state.appliedMappings) {
+    if (m.plain && m.cipher && !inverted[m.plain]) {
+      inverted[m.plain] = m.cipher;
     }
   }
   return inverted;
 }
 
 /**
- * Detect duplicates / collisions in mappings
+ * Detect duplicates / collisions across both Plain and Encrypted alphabets
  */
-function getDuplicatePlainMappings() {
+function getConflicts() {
+  const duplicatePlains = {}; // plain -> [cipher1, cipher2, ...]
+  const duplicateCiphers = {}; // cipher -> [plain1, plain2, ...]
   const plainToCiphers = {};
-  const duplicatePlains = new Set();
+  const cipherToPlains = {};
 
-  for (const [cipher, plain] of Object.entries(state.cipherToPlain)) {
-    if (!plain) continue;
-    const p = plain.toUpperCase();
-    if (!plainToCiphers[p]) {
-      plainToCiphers[p] = [];
-    }
-    plainToCiphers[p].push(cipher.toUpperCase());
-    if (plainToCiphers[p].length > 1) {
-      duplicatePlains.add(p);
+  for (const m of state.appliedMappings) {
+    if (!m.cipher || !m.plain) continue;
+    const c = m.cipher.toUpperCase();
+    const p = m.plain.toUpperCase();
+
+    if (!plainToCiphers[p]) plainToCiphers[p] = [];
+    if (!plainToCiphers[p].includes(c)) plainToCiphers[p].push(c);
+
+    if (!cipherToPlains[c]) cipherToPlains[c] = [];
+    if (!cipherToPlains[c].includes(p)) cipherToPlains[c].push(p);
+  }
+
+  for (const [p, ciphers] of Object.entries(plainToCiphers)) {
+    if (ciphers.length > 1) {
+      duplicatePlains[p] = ciphers;
     }
   }
 
-  return { plainToCiphers, duplicatePlains };
+  for (const [c, plains] of Object.entries(cipherToPlains)) {
+    if (plains.length > 1) {
+      duplicateCiphers[c] = plains;
+    }
+  }
+
+  return { duplicatePlains, duplicateCiphers, plainToCiphers, cipherToPlains };
+}
+
+/**
+ * Backward compatibility wrapper for getDuplicatePlainMappings
+ */
+function getDuplicatePlainMappings() {
+  const { plainToCiphers, duplicatePlains } = getConflicts();
+  return { plainToCiphers, duplicatePlains: new Set(Object.keys(duplicatePlains)) };
 }
 
 // ---------------------------------------------------------------------------
 // Mapping Operations & Autofill Synchronization
 // ---------------------------------------------------------------------------
 
-function setMapping(cipherChar, plainChar) {
+/**
+ * Set mapping from Encrypted Alphabet table or Ciphertext workspace.
+ * Sets the plain letter for this cipherChar without erasing other cipher letters mapped to plainChar.
+ */
+function setEncryptedMapping(cipherChar, plainChar) {
   const c = cipherChar.toUpperCase();
   const p = plainChar ? plainChar.toUpperCase() : null;
-  if (p && state.cipherToPlain[c] === p) return;
-  if (!p && !state.cipherToPlain[c]) return;
 
   pushHistory();
+  // Filter out any existing mapping where cipher is c
   state.appliedMappings = state.appliedMappings.filter(m => m.cipher !== c);
-  if (!p) {
-    delete state.cipherToPlain[c];
-  } else {
-    state.cipherToPlain[c] = p;
+  if (p) {
     state.appliedMappings.unshift({ cipher: c, plain: p });
   }
+  syncCipherToPlain();
+  renderAll();
+}
+
+/**
+ * Set mapping from Plain Alphabet table.
+ * Sets the cipher letter for this plainChar without erasing other plain letters mapped to cipherChar.
+ */
+function setPlainMapping(plainChar, cipherChar) {
+  const p = plainChar.toUpperCase();
+  const c = cipherChar ? cipherChar.toUpperCase() : null;
+
+  pushHistory();
+  // Filter out any existing mapping where plain is p
+  state.appliedMappings = state.appliedMappings.filter(m => m.plain !== p);
+  if (c) {
+    state.appliedMappings.unshift({ cipher: c, plain: p });
+  }
+  syncCipherToPlain();
+  renderAll();
+}
+
+/**
+ * Backward-compatible setMapping (routes to setEncryptedMapping)
+ */
+function setMapping(cipherChar, plainChar) {
+  setEncryptedMapping(cipherChar, plainChar);
+}
+
+/**
+ * Remove mapping for a cipher letter
+ */
+function removeCipherMapping(cipherChar) {
+  const c = cipherChar.toUpperCase();
+  pushHistory();
+  state.appliedMappings = state.appliedMappings.filter(m => m.cipher !== c);
+  syncCipherToPlain();
+  renderAll();
+}
+
+/**
+ * Remove mapping for a plain letter
+ */
+function removePlainMapping(plainChar) {
+  const p = plainChar.toUpperCase();
+  pushHistory();
+  state.appliedMappings = state.appliedMappings.filter(m => m.plain !== p);
+  syncCipherToPlain();
+  renderAll();
+}
+
+/**
+ * Remove a specific { cipher, plain } mapping pair
+ */
+function removeMappingPair(cipherChar, plainChar) {
+  const c = cipherChar.toUpperCase();
+  const p = plainChar.toUpperCase();
+  pushHistory();
+  state.appliedMappings = state.appliedMappings.filter(m => !(m.cipher === c && m.plain === p));
+  syncCipherToPlain();
   renderAll();
 }
 
 function removeMapping(cipherChar) {
-  const c = cipherChar.toUpperCase();
-  if (!state.cipherToPlain[c]) return;
-
-  pushHistory();
-  delete state.cipherToPlain[c];
-  state.appliedMappings = state.appliedMappings.filter(m => m.cipher !== c);
-  renderAll();
+  removeCipherMapping(cipherChar);
 }
 
 function clearAllMappings() {
-  if (Object.keys(state.cipherToPlain).length === 0) return;
+  if (state.appliedMappings.length === 0) return;
   pushHistory();
-  state.cipherToPlain = {};
   state.appliedMappings = [];
+  syncCipherToPlain();
   renderAll();
 }
 
@@ -369,13 +484,20 @@ function renderAll() {
 function renderConflictBanner() {
   const banner = document.getElementById("conflict-banner");
   const msgEl = document.getElementById("conflict-message");
-  const { duplicatePlains, plainToCiphers } = getDuplicatePlainMappings();
+  const { duplicatePlains, duplicateCiphers } = getConflicts();
 
-  if (duplicatePlains.size > 0) {
-    const details = Array.from(duplicatePlains).map(p => {
-      return `Plain '${p}' assigned to [${plainToCiphers[p].join(", ")}]`;
+  const plainEntries = Object.entries(duplicatePlains);
+  const cipherEntries = Object.entries(duplicateCiphers);
+
+  if (plainEntries.length > 0 || cipherEntries.length > 0) {
+    const details = [];
+    plainEntries.forEach(([p, ciphers]) => {
+      details.push(`Plain '${p}' assigned to multiple ciphers: [${ciphers.join(", ")}]`);
     });
-    msgEl.textContent = `Duplicate mapping conflict: ${details.join(" | ")}`;
+    cipherEntries.forEach(([c, plains]) => {
+      details.push(`Cipher '${c}' assigned to multiple plains: [${plains.join(", ")}]`);
+    });
+    msgEl.textContent = `Duplicate mapping conflicts: ${details.join(" | ")}`;
     banner.classList.remove("hidden");
   } else {
     banner.classList.add("hidden");
@@ -392,61 +514,73 @@ function renderAlphabetTables() {
   const encryptedInputsEl = document.getElementById("encrypted-alphabet-inputs");
   const encryptedLabelsEl = document.getElementById("encrypted-alphabet-labels");
 
-  const plainToCipher = getPlainToCipher();
-  const { duplicatePlains, plainToCiphers } = getDuplicatePlainMappings();
+  const { duplicatePlains, duplicateCiphers } = getConflicts();
 
-  const assignedCipherLetters = new Set(Object.keys(state.cipherToPlain).map(c => c.toUpperCase()));
-  const assignedPlainLetters = new Set(Object.values(state.cipherToPlain).map(p => p.toUpperCase()));
-
-  const inputsAlreadyExist = plainInputsEl.children.length === 26;
+  const assignedCipherLetters = new Set(state.appliedMappings.map(m => m.cipher.toUpperCase()));
+  const assignedPlainLetters = new Set(state.appliedMappings.map(m => m.plain.toUpperCase()));
 
   for (let i = 65; i <= 90; i++) {
     const idx = i - 65;
     const letter = String.fromCharCode(i);
 
-    // 1. Plain alphabet Table
-    const isCipherAssigned = assignedCipherLetters.has(letter);
+    // =========================================================================
+    // 1. Plain Alphabet Table
+    // Row 1: Plain alphabet labels A-Z (tracks cipher letters used / in conflict)
+    // Row 2: Inputs for cipher letters mapped to this plain letter
+    // =========================================================================
+
+    // Plain label cell
     let plainLabelCell = plainLabelsEl.children[idx];
     if (!plainLabelCell) {
       plainLabelCell = document.createElement("div");
       plainLabelCell.textContent = letter;
       plainLabelsEl.appendChild(plainLabelCell);
     }
-    plainLabelCell.className = `cell-label ${isCipherAssigned ? "used" : ""}`;
-    plainLabelCell.title = isCipherAssigned ? `Cipher letter '${letter}' has been used` : `Cipher letter '${letter}' is available`;
 
-    const cipherMapped = plainToCipher[letter] || "";
-    const isConflictPlain = duplicatePlains.has(letter);
+    const isPlainLabelConflict = !!duplicatePlains[letter] || !!duplicateCiphers[letter];
+    const isCipherAssigned = assignedCipherLetters.has(letter);
+
+    plainLabelCell.className = `cell-label ${isPlainLabelConflict ? "conflict-label" : (isCipherAssigned ? "used" : "")}`;
+    plainLabelCell.title = isPlainLabelConflict
+      ? `Duplicate conflict on letter '${letter}'!`
+      : (isCipherAssigned ? `Cipher letter '${letter}' has been used` : `Cipher letter '${letter}' is available`);
+
+    // Plain input cell
+    const ciphersForPlain = getCiphersForPlain(letter);
+    const cipherMapped = ciphersForPlain.join("");
+    const isConflictPlain = ciphersForPlain.length > 1 || ciphersForPlain.some(c => !!duplicateCiphers[c]);
+
     let plainInput = plainInputsEl.children[idx];
-
     if (!plainInput) {
       plainInput = document.createElement("input");
       plainInput.type = "text";
-      plainInput.maxLength = 1;
+      plainInput.maxLength = 4;
       plainInput.dataset.plain = letter;
       plainInput.dataset.idx = idx;
       plainInput.title = `Cipher letter that encrypts to plain '${letter}'`;
 
+      plainInput.addEventListener("focus", () => {
+        plainInput.select();
+      });
+
       plainInput.addEventListener("input", (e) => {
         const val = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
-        e.target.value = val;
         if (val) {
-          setMapping(val, letter);
-          // Advance to next plain input
+          const char = val.slice(-1);
+          e.target.value = char;
+          setPlainMapping(letter, char);
           if (idx < 25) {
             plainInputsEl.children[idx + 1].focus();
           }
         } else {
-          if (cipherMapped) {
-            removeMapping(cipherMapped);
-          }
+          setPlainMapping(letter, null);
         }
       });
 
       plainInput.addEventListener("keydown", (e) => {
         if (e.key === "Backspace" || e.key === "Delete") {
-          if (cipherMapped) {
-            removeMapping(cipherMapped);
+          if (!plainInput.value || (plainInput.selectionStart === 0 && plainInput.selectionEnd === plainInput.value.length)) {
+            setPlainMapping(letter, null);
           }
         } else if (e.key === "ArrowRight" && idx < 25) {
           plainInputsEl.children[idx + 1].focus();
@@ -462,37 +596,52 @@ function renderAlphabetTables() {
       plainInput.value = cipherMapped;
     }
     plainInput.className = `cell-input ${isConflictPlain ? "conflict" : ""}`;
+    plainInput.title = isConflictPlain
+      ? `Conflict on plain '${letter}'! Mapped ciphers: [${ciphersForPlain.join(", ")}]`
+      : `Cipher letter that encrypts to plain '${letter}'`;
 
-    // 2. Encrypted alphabet Table
-    const plainMapped = state.cipherToPlain[letter] || "";
-    const isConflictCipher = plainMapped && duplicatePlains.has(plainMapped.toUpperCase());
+    // =========================================================================
+    // 2. Encrypted Alphabet Table
+    // Row 1: Inputs for plain letters decrypted from this cipher letter
+    // Row 2: Encrypted alphabet labels A-Z (tracks plain letters used / in conflict)
+    // =========================================================================
+
+    const plainsForCipher = getPlainsForCipher(letter);
+    const plainMapped = plainsForCipher.join("");
+    const isConflictCipher = plainsForCipher.length > 1 || plainsForCipher.some(p => !!duplicatePlains[p]);
+
     let encInput = encryptedInputsEl.children[idx];
-
     if (!encInput) {
       encInput = document.createElement("input");
       encInput.type = "text";
-      encInput.maxLength = 1;
+      encInput.maxLength = 4;
       encInput.dataset.cipher = letter;
       encInput.dataset.idx = idx;
       encInput.title = `Plain letter decrypted from cipher '${letter}'`;
 
+      encInput.addEventListener("focus", () => {
+        encInput.select();
+      });
+
       encInput.addEventListener("input", (e) => {
         const val = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
-        e.target.value = val;
         if (val) {
-          setMapping(letter, val);
-          // Advance to next enc input
+          const char = val.slice(-1);
+          e.target.value = char;
+          setEncryptedMapping(letter, char);
           if (idx < 25) {
             encryptedInputsEl.children[idx + 1].focus();
           }
         } else {
-          removeMapping(letter);
+          setEncryptedMapping(letter, null);
         }
       });
 
       encInput.addEventListener("keydown", (e) => {
         if (e.key === "Backspace" || e.key === "Delete") {
-          removeMapping(letter);
+          if (!encInput.value || (encInput.selectionStart === 0 && encInput.selectionEnd === encInput.value.length)) {
+            setEncryptedMapping(letter, null);
+          }
         } else if (e.key === "ArrowRight" && idx < 25) {
           encryptedInputsEl.children[idx + 1].focus();
         } else if (e.key === "ArrowLeft" && idx > 0) {
@@ -507,16 +656,24 @@ function renderAlphabetTables() {
       encInput.value = plainMapped;
     }
     encInput.className = `cell-input ${isConflictCipher ? "conflict" : ""}`;
+    encInput.title = isConflictCipher
+      ? `Conflict on cipher '${letter}'! Mapped plains: [${plainsForCipher.join(", ")}]`
+      : `Plain letter decrypted from cipher '${letter}'`;
 
-    const isPlainAssigned = assignedPlainLetters.has(letter);
     let encLabelCell = encryptedLabelsEl.children[idx];
     if (!encLabelCell) {
       encLabelCell = document.createElement("div");
       encLabelCell.textContent = letter;
       encryptedLabelsEl.appendChild(encLabelCell);
     }
-    encLabelCell.className = `cell-label ${isPlainAssigned ? "used" : ""}`;
-    encLabelCell.title = isPlainAssigned ? `Plain letter '${letter}' has been used` : `Plain letter '${letter}' is available`;
+
+    const isEncLabelConflict = !!duplicatePlains[letter] || !!duplicateCiphers[letter];
+    const isPlainAssigned = assignedPlainLetters.has(letter);
+
+    encLabelCell.className = `cell-label ${isEncLabelConflict ? "conflict-label" : (isPlainAssigned ? "used" : "")}`;
+    encLabelCell.title = isEncLabelConflict
+      ? `Duplicate conflict on letter '${letter}'!`
+      : (isPlainAssigned ? `Plain letter '${letter}' has been used` : `Plain letter '${letter}' is available`);
   }
 }
 
@@ -527,7 +684,7 @@ function renderCipherWorkspace() {
   const container = document.getElementById("cipher-interactive-container");
   container.innerHTML = "";
 
-  const { duplicatePlains } = getDuplicatePlainMappings();
+  const { duplicatePlains, duplicateCiphers } = getConflicts();
   const lettersOnly = getLettersOnly();
   const assignedCount = Object.keys(state.cipherToPlain).length;
 
@@ -560,8 +717,9 @@ function renderCipherWorkspace() {
       const isSpace = token === " ";
       const isLetter = /[A-Z]/i.test(token);
       const cipherChar = isLetter ? token.toUpperCase() : token;
-      const plainChar = isLetter ? (state.cipherToPlain[cipherChar] || "") : "";
-      const isConflict = plainChar && duplicatePlains.has(plainChar.toUpperCase());
+      const plains = isLetter ? getPlainsForCipher(cipherChar) : [];
+      const plainChar = plains[0] || "";
+      const isConflict = isLetter && (plains.length > 1 || (plainChar && !!duplicatePlains[plainChar.toUpperCase()]));
 
       // Check if matches active highlight
       const isMatch = state.highlightedChar && state.highlightedChar === cipherChar;
@@ -589,6 +747,13 @@ function renderCipherWorkspace() {
         const charSpan = document.createElement("span");
         charSpan.className = `blank-char ${!plainChar ? "empty" : ""} ${isConflict ? "conflict" : ""}`;
         charSpan.textContent = plainChar || "_";
+        if (isConflict) {
+          if (plains.length > 1) {
+            charSpan.title = `Conflict: Cipher '${cipherChar}' mapped to [${plains.join(", ")}]`;
+          } else {
+            charSpan.title = `Conflict: Plain '${plainChar}' used by ciphers [${getCiphersForPlain(plainChar).join(", ")}]`;
+          }
+        }
         plainSlot.appendChild(charSpan);
       }
 
@@ -833,17 +998,18 @@ function renderAppliedMappings() {
     return;
   }
 
-  const { duplicatePlains } = getDuplicatePlainMappings();
+  const { duplicatePlains, duplicateCiphers } = getConflicts();
 
   container.innerHTML = state.appliedMappings.map((m, index) => {
     const isLatest = index === 0;
-    const isConflict = duplicatePlains.has(m.plain);
+    const isConflict = (duplicatePlains[m.plain] && duplicatePlains[m.plain].length > 1) ||
+                       (duplicateCiphers[m.cipher] && duplicateCiphers[m.cipher].length > 1);
     return `
-      <div class="mapping-chip ${isLatest ? "latest" : ""} ${isConflict ? "conflict" : ""}" data-cipher="${m.cipher}" title="Click to highlight '${m.cipher}' in text">
+      <div class="mapping-chip ${isLatest ? "latest" : ""} ${isConflict ? "conflict" : ""}" data-cipher="${m.cipher}" data-plain="${m.plain}" title="Click to highlight '${m.cipher}' in text">
         <span class="chip-cipher">${m.cipher}</span>
         <span class="chip-arrow">→</span>
         <span class="chip-plain">${m.plain}</span>
-        <span class="chip-delete" data-delete-cipher="${m.cipher}" title="Remove mapping ${m.cipher} → ${m.plain}">&times;</span>
+        <span class="chip-delete" data-delete-cipher="${m.cipher}" data-delete-plain="${m.plain}" title="Remove mapping ${m.cipher} → ${m.plain}">&times;</span>
       </div>
     `;
   }).join("");
@@ -853,7 +1019,7 @@ function renderAppliedMappings() {
       const deleteBtn = e.target.closest("[data-delete-cipher]");
       if (deleteBtn) {
         e.stopPropagation();
-        removeMapping(deleteBtn.dataset.deleteCipher);
+        removeMappingPair(deleteBtn.dataset.deleteCipher, deleteBtn.dataset.deletePlain);
         return;
       }
 
