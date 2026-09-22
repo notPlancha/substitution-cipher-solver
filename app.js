@@ -37,6 +37,13 @@ const SAMPLE_INITIAL_MAPPINGS = {
   T: "T"
 };
 
+// Initial snapshot order of applied mappings
+const SAMPLE_INITIAL_APPLIED = [
+  { cipher: "T", plain: "T" },
+  { cipher: "F", plain: "H" },
+  { cipher: "A", plain: "E" }
+];
+
 // ---------------------------------------------------------------------------
 // Application State
 // ---------------------------------------------------------------------------
@@ -45,6 +52,8 @@ const state = {
   tokens: [],
   // Cipher letter -> Plain letter mapping: { A: 'E', F: 'H', T: 'T' }
   cipherToPlain: {},
+  // Chronological list of applied mappings (most recent first): [{ cipher: 'T', plain: 'T' }, ...]
+  appliedMappings: [],
   // Currently focused token index in the typable text
   focusedIndex: null,
   // Currently highlighted cipher letter (for all matching characters)
@@ -69,6 +78,7 @@ function pushHistory() {
   history.past.push({
     tokens: [...state.tokens],
     cipherToPlain: { ...state.cipherToPlain },
+    appliedMappings: state.appliedMappings.map(m => ({ ...m })),
     focusedIndex: state.focusedIndex
   });
   if (history.past.length > 100) {
@@ -83,11 +93,13 @@ function undo() {
   history.future.push({
     tokens: [...state.tokens],
     cipherToPlain: { ...state.cipherToPlain },
+    appliedMappings: state.appliedMappings.map(m => ({ ...m })),
     focusedIndex: state.focusedIndex
   });
   const prev = history.past.pop();
   state.tokens = [...prev.tokens];
   state.cipherToPlain = { ...prev.cipherToPlain };
+  state.appliedMappings = prev.appliedMappings ? prev.appliedMappings.map(m => ({ ...m })) : [];
   state.focusedIndex = prev.focusedIndex;
   updateHistoryButtons();
   renderAll();
@@ -99,11 +111,13 @@ function redo() {
   history.past.push({
     tokens: [...state.tokens],
     cipherToPlain: { ...state.cipherToPlain },
+    appliedMappings: state.appliedMappings.map(m => ({ ...m })),
     focusedIndex: state.focusedIndex
   });
   const next = history.future.pop();
   state.tokens = [...next.tokens];
   state.cipherToPlain = { ...next.cipherToPlain };
+  state.appliedMappings = next.appliedMappings ? next.appliedMappings.map(m => ({ ...m })) : [];
   state.focusedIndex = next.focusedIndex;
   updateHistoryButtons();
   renderAll();
@@ -130,6 +144,7 @@ document.addEventListener("DOMContentLoaded", () => {
 function loadSample() {
   state.tokens = SAMPLE_CIPHERTEXT.split("");
   state.cipherToPlain = { ...SAMPLE_INITIAL_MAPPINGS };
+  state.appliedMappings = SAMPLE_INITIAL_APPLIED.map(m => ({ ...m }));
   state.focusedIndex = null;
   state.highlightedChar = null;
   state.highlightedNgram = null;
@@ -279,10 +294,12 @@ function setMapping(cipherChar, plainChar) {
   if (!p && !state.cipherToPlain[c]) return;
 
   pushHistory();
+  state.appliedMappings = state.appliedMappings.filter(m => m.cipher !== c);
   if (!p) {
     delete state.cipherToPlain[c];
   } else {
     state.cipherToPlain[c] = p;
+    state.appliedMappings.unshift({ cipher: c, plain: p });
   }
   renderAll();
 }
@@ -293,6 +310,7 @@ function removeMapping(cipherChar) {
 
   pushHistory();
   delete state.cipherToPlain[c];
+  state.appliedMappings = state.appliedMappings.filter(m => m.cipher !== c);
   renderAll();
 }
 
@@ -300,6 +318,7 @@ function clearAllMappings() {
   if (Object.keys(state.cipherToPlain).length === 0) return;
   pushHistory();
   state.cipherToPlain = {};
+  state.appliedMappings = [];
   renderAll();
 }
 
@@ -789,10 +808,62 @@ function focusBlank(index) {
 // ---------------------------------------------------------------------------
 
 function renderStatistics() {
+  renderAppliedMappings();
   renderLetterChart();
   renderBigrams();
   renderTrigrams();
   renderDoubles();
+}
+
+/**
+ * Render Last Mappings Applied List (Snapshot Feed)
+ */
+function renderAppliedMappings() {
+  const container = document.getElementById("applied-mappings-list");
+  const countEl = document.getElementById("applied-mappings-count");
+  if (!container) return;
+
+  const count = state.appliedMappings.length;
+  if (countEl) {
+    countEl.textContent = `${count} applied`;
+  }
+
+  if (count === 0) {
+    container.innerHTML = `<div class="applied-mappings-empty">No mappings applied yet. Type in any blank to begin.</div>`;
+    return;
+  }
+
+  const { duplicatePlains } = getDuplicatePlainMappings();
+
+  container.innerHTML = state.appliedMappings.map((m, index) => {
+    const isLatest = index === 0;
+    const isConflict = duplicatePlains.has(m.plain);
+    return `
+      <div class="mapping-chip ${isLatest ? "latest" : ""} ${isConflict ? "conflict" : ""}" data-cipher="${m.cipher}" title="Click to highlight '${m.cipher}' in text">
+        <span class="chip-cipher">${m.cipher}</span>
+        <span class="chip-arrow">→</span>
+        <span class="chip-plain">${m.plain}</span>
+        <span class="chip-delete" data-delete-cipher="${m.cipher}" title="Remove mapping ${m.cipher} → ${m.plain}">&times;</span>
+      </div>
+    `;
+  }).join("");
+
+  container.querySelectorAll(".mapping-chip").forEach(chip => {
+    chip.addEventListener("click", (e) => {
+      const deleteBtn = e.target.closest("[data-delete-cipher]");
+      if (deleteBtn) {
+        e.stopPropagation();
+        removeMapping(deleteBtn.dataset.deleteCipher);
+        return;
+      }
+
+      const cipher = chip.dataset.cipher;
+      state.highlightedChar = (state.highlightedChar === cipher) ? null : cipher;
+      state.highlightedNgram = null;
+      renderCipherWorkspace();
+      renderLetterChart();
+    });
+  });
 }
 
 /**

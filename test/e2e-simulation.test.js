@@ -11,12 +11,24 @@ describe("Substitution Cipher Solver Logic Simulation", () => {
   function createSimulator() {
     const state = {
       tokens: SAMPLE_CIPHERTEXT.split(""),
-      cipherToPlain: { A: "E", F: "H", T: "T" }
+      cipherToPlain: { A: "E", F: "H", T: "T" },
+      appliedMappings: [
+        { cipher: "T", plain: "T" },
+        { cipher: "F", plain: "H" },
+        { cipher: "A", plain: "E" }
+      ]
     };
 
     function setMapping(c, p) {
-      if (!p) delete state.cipherToPlain[c.toUpperCase()];
-      else state.cipherToPlain[c.toUpperCase()] = p.toUpperCase();
+      const cu = c.toUpperCase();
+      const pu = p ? p.toUpperCase() : null;
+      state.appliedMappings = state.appliedMappings.filter(m => m.cipher !== cu);
+      if (!pu) {
+        delete state.cipherToPlain[cu];
+      } else {
+        state.cipherToPlain[cu] = pu;
+        state.appliedMappings.unshift({ cipher: cu, plain: pu });
+      }
     }
 
     function getPlainToCipher() {
@@ -69,7 +81,8 @@ describe("Substitution Cipher Solver Logic Simulation", () => {
     function pushHistory() {
       historyPast.push({
         tokens: [...state.tokens],
-        cipherToPlain: { ...state.cipherToPlain }
+        cipherToPlain: { ...state.cipherToPlain },
+        appliedMappings: state.appliedMappings.map(m => ({ ...m }))
       });
       historyFuture = [];
     }
@@ -78,11 +91,13 @@ describe("Substitution Cipher Solver Logic Simulation", () => {
       if (historyPast.length === 0) return false;
       historyFuture.push({
         tokens: [...state.tokens],
-        cipherToPlain: { ...state.cipherToPlain }
+        cipherToPlain: { ...state.cipherToPlain },
+        appliedMappings: state.appliedMappings.map(m => ({ ...m }))
       });
       const prev = historyPast.pop();
       state.tokens = [...prev.tokens];
       state.cipherToPlain = { ...prev.cipherToPlain };
+      state.appliedMappings = prev.appliedMappings ? prev.appliedMappings.map(m => ({ ...m })) : [];
       return true;
     }
 
@@ -90,11 +105,13 @@ describe("Substitution Cipher Solver Logic Simulation", () => {
       if (historyFuture.length === 0) return false;
       historyPast.push({
         tokens: [...state.tokens],
-        cipherToPlain: { ...state.cipherToPlain }
+        cipherToPlain: { ...state.cipherToPlain },
+        appliedMappings: state.appliedMappings.map(m => ({ ...m }))
       });
       const next = historyFuture.pop();
       state.tokens = [...next.tokens];
       state.cipherToPlain = { ...next.cipherToPlain };
+      state.appliedMappings = next.appliedMappings ? next.appliedMappings.map(m => ({ ...m })) : [];
       return true;
     }
 
@@ -195,5 +212,36 @@ describe("Substitution Cipher Solver Logic Simulation", () => {
     expect(sim.tokens[6]).toBe(" ");
     sim.undo();
     expect(sim.tokens[6]).not.toBe(" ");
+  });
+
+  it("tracks last mappings applied with initial snapshot T->T, F->H, A->E", () => {
+    const sim = createSimulator();
+    // 1. Initial snapshot has T->T, F->H, A->E
+    expect(sim.state.appliedMappings).toEqual([
+      { cipher: "T", plain: "T" },
+      { cipher: "F", plain: "H" },
+      { cipher: "A", plain: "E" }
+    ]);
+
+    // 2. Applying a new mapping (e.g. T -> V) moves T -> V to the top
+    sim.setMappingWithHistory("T", "V");
+    expect(sim.state.appliedMappings[0]).toEqual({ cipher: "T", plain: "V" });
+    expect(sim.state.appliedMappings.length).toBe(3);
+
+    // 3. Applying an unmapped letter (e.g. C -> V) prepends to top
+    sim.setMappingWithHistory("C", "V");
+    expect(sim.state.appliedMappings[0]).toEqual({ cipher: "C", plain: "V" });
+    expect(sim.state.appliedMappings[1]).toEqual({ cipher: "T", plain: "V" });
+    expect(sim.state.appliedMappings.length).toBe(4);
+
+    // 4. Undo restores previous applied mappings order
+    sim.undo();
+    expect(sim.state.appliedMappings[0]).toEqual({ cipher: "T", plain: "V" });
+    expect(sim.state.appliedMappings.length).toBe(3);
+
+    // 5. Removing a mapping removes it from the list
+    sim.setMapping("T", "");
+    expect(sim.state.appliedMappings.find(m => m.cipher === "T")).toBeUndefined();
+    expect(sim.state.appliedMappings.length).toBe(2);
   });
 });

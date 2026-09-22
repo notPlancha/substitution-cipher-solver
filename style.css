@@ -537,6 +537,94 @@ kbd {
   color: #64748b;
 }
 
+/* --------------------------------------------------------------------------
+   Last Mappings Applied Chips
+   -------------------------------------------------------------------------- */
+.applied-mappings-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.mapping-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.mapping-chip:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+}
+
+.mapping-chip.latest {
+  background: #e0f2fe;
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 1px #38bdf8;
+}
+
+.mapping-chip.conflict {
+  background: var(--conflict-bg) !important;
+  border-color: var(--conflict-border) !important;
+}
+
+.mapping-chip .chip-cipher {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.mapping-chip .chip-arrow {
+  color: #64748b;
+  font-weight: 400;
+  font-size: 11px;
+}
+
+.mapping-chip .chip-plain {
+  color: #1d72b8;
+  font-size: 14px;
+}
+
+.mapping-chip.conflict .chip-plain {
+  color: var(--conflict-text);
+}
+
+.mapping-chip .chip-delete {
+  font-size: 13px;
+  color: #94a3b8;
+  margin-left: 2px;
+  padding: 0 4px;
+  border-radius: 4px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.mapping-chip .chip-delete:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+.applied-mappings-empty {
+  font-size: 12px;
+  color: #64748b;
+  font-style: italic;
+  padding: 4px 0;
+}
+
 .sort-toggle {
   display: flex;
   border: 1px solid #cbd5e1;
