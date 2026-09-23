@@ -129,11 +129,91 @@ function updateHistoryButtons() {
 }
 
 // ---------------------------------------------------------------------------
+// LocalStorage State Persistence
+// ---------------------------------------------------------------------------
+const STORAGE_KEY = "substitution_cipher_solver_state_v1";
+
+function saveStateToStorage() {
+  try {
+    if (typeof localStorage === "undefined") return;
+    const payload = {
+      tokens: state.tokens,
+      appliedMappings: state.appliedMappings,
+      wrapLength: state.wrapLength,
+      sortMode: state.sortMode,
+      historyPast: history.past,
+      historyFuture: history.future
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch (err) {
+    console.warn("Could not save solver state to localStorage:", err);
+  }
+}
+
+function loadStateFromStorage() {
+  try {
+    if (typeof localStorage === "undefined") return false;
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data || !Array.isArray(data.tokens) || data.tokens.length === 0) {
+      return false;
+    }
+
+    state.tokens = [...data.tokens];
+    state.appliedMappings = Array.isArray(data.appliedMappings)
+      ? data.appliedMappings.filter(m => m && m.cipher && m.plain).map(m => ({
+          cipher: String(m.cipher).toUpperCase(),
+          plain: String(m.plain).toUpperCase()
+        }))
+      : [];
+    syncCipherToPlain();
+
+    if (data.wrapLength) {
+      state.wrapLength = data.wrapLength;
+    }
+    if (data.sortMode === "freq" || data.sortMode === "az") {
+      state.sortMode = data.sortMode;
+    }
+
+    if (Array.isArray(data.historyPast)) {
+      history.past = data.historyPast;
+    }
+    if (Array.isArray(data.historyFuture)) {
+      history.future = data.historyFuture;
+    }
+
+    state.focusedIndex = null;
+    state.highlightedChar = null;
+    state.highlightedNgram = null;
+    return true;
+  } catch (err) {
+    console.warn("Could not restore solver state from localStorage:", err);
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Initialization
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
-  loadSample();
+  const restored = loadStateFromStorage();
+  if (!restored) {
+    loadSample();
+  }
   setupEventListeners();
+
+  const wrapSelect = document.getElementById("line-width-select");
+  if (wrapSelect && state.wrapLength) {
+    wrapSelect.value = state.wrapLength;
+  }
+  const btnFreq = document.getElementById("btn-sort-freq");
+  const btnAz = document.getElementById("btn-sort-az");
+  if (btnFreq && btnAz && state.sortMode) {
+    btnFreq.classList.toggle("active", state.sortMode === "freq");
+    btnAz.classList.toggle("active", state.sortMode === "az");
+  }
+
   updateHistoryButtons();
   renderAll();
 });
@@ -476,6 +556,7 @@ function renderAll() {
   renderAlphabetTables();
   renderCipherWorkspace();
   renderStatistics();
+  saveStateToStorage();
 }
 
 /**
@@ -1278,6 +1359,7 @@ function setupEventListeners() {
     btnFreq.classList.add("active");
     btnAz.classList.remove("active");
     renderStatistics();
+    saveStateToStorage();
   });
 
   btnAz.addEventListener("click", () => {
@@ -1285,12 +1367,14 @@ function setupEventListeners() {
     btnAz.classList.add("active");
     btnFreq.classList.remove("active");
     renderStatistics();
+    saveStateToStorage();
   });
 
   // Wrap length selector
   document.getElementById("line-width-select").addEventListener("change", (e) => {
     state.wrapLength = e.target.value;
     renderCipherWorkspace();
+    saveStateToStorage();
   });
 
   // Custom Ciphertext Modal
