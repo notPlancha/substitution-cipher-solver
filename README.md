@@ -73,7 +73,22 @@ This repository is ready to publish to GitHub Pages out-of-the-box with pure sta
 
 No complex build steps or heavy dependencies required.
 
-### With Bun (Recommended)
+### With Just
+```bash
+# List available recipes
+just
+
+# Run the local development server (http://localhost:3000)
+just dev      # or: just s
+
+# Run automated tests
+just test     # or: just t
+
+# Run tests in watch mode
+just test-watch
+```
+
+### With Bun
 ```bash
 # Run the local server
 bun dev
